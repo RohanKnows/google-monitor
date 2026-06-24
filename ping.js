@@ -1,20 +1,34 @@
 const axios = require('axios');
 
-async function checkGoogle() {
-    // 1. Record the exact time before we send the request
+const websites = [
+    'https://www.google.com',
+    'https://www.github.com',
+    'https://www.apple.com'
+];
+
+// This helper function handles a single website check
+async function checkSingleSite(url) {
     const startTime = Date.now();
-    
     try {
-        await axios.get('https://www.google.com');
-        
-        // 2. Record the time after Google responds, and subtract the start time
+        await axios.get(url, { timeout: 5000 });
         const responseTime = Date.now() - startTime;
-        
-        console.log(`Google is alive! Response time: ${responseTime}ms ✅`);
+        console.log(`✅ ${url} is up! (${responseTime}ms)`);
     } catch (error) {
-        console.log("Google is down! ❌ Error:", error.message);
+        console.log(`❌ ${url} is DOWN! Error: ${error.message}`);
     }
 }
 
-setInterval(checkGoogle, 5000);
-console.log("Uptime monitor with timer started... Press Control + C to stop.");
+async function checkAllWebsitesConcurrent() {
+    console.log(`--- Starting Fast Monitor Cycle: ${new Date().toLocaleTimeString()} ---`);
+    
+    // 1. Create a list of "promises" (tasks running at the same time)
+    const tasks = websites.map(url => checkSingleSite(url));
+    
+    // 2. Fire them all simultaneously and wait for the entire batch to finish
+    await Promise.all(tasks);
+    
+    console.log(`--- Cycle Finished ---`);
+}
+
+setInterval(checkAllWebsitesConcurrent, 10000);
+checkAllWebsitesConcurrent();
