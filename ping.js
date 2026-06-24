@@ -1,4 +1,5 @@
 const axios = require('axios');
+const sqlite3 = require('sqlite3').verbose();
 
 const websites = [
     'https://www.google.com',
@@ -6,29 +7,45 @@ const websites = [
     'https://www.apple.com'
 ];
 
-// This helper function handles a single website check
+// Open our database connection
+const db = new sqlite3.Database('./metrics.db');
+
+// This helper function handles a single website check AND saves it to the DB
 async function checkSingleSite(url) {
     const startTime = Date.now();
+    let statusCode = null;
+    let responseTimeMs = null;
+    let isUp = 0; // 0 means down, 1 means up
+
     try {
-        await axios.get(url, { timeout: 5000 });
-        const responseTime = Date.now() - startTime;
-        console.log(`✅ ${url} is up! (${responseTime}ms)`);
+        const response = await axios.get(url, { timeout: 5000 });
+        statusCode = response.status;
+        responseTimeMs = Date.now() - startTime;
+        isUp = 1; 
+        console.log(`✅ ${url} is up! (${responseTimeMs}ms)`);
     } catch (error) {
+        responseTimeMs = Date.now() - startTime;
+        if (error.response) {
+            statusCode = error.response.status;
+        }
         console.log(`❌ ${url} is DOWN! Error: ${error.message}`);
     }
+
+    // Insert the results into our SQLite database
+    const query = `INSERT INTO ping_logs (url, status_code, response_time_ms, is_up) VALUES (?, ?, ?, ?)`;
+    db.run(query, [url, statusCode, responseTimeMs, isUp], (err) => {
+        if (err) {
+            console.error("Failed to save log to database:", err.message);
+        }
+    });
 }
 
 async function checkAllWebsitesConcurrent() {
-    console.log(`--- Starting Fast Monitor Cycle: ${new Date().toLocaleTimeString()} ---`);
-    
-    // 1. Create a list of "promises" (tasks running at the same time)
+    console.log(`\n--- Starting Monitor Cycle: ${new Date().toLocaleTimeString()} ---`);
     const tasks = websites.map(url => checkSingleSite(url));
-    
-    // 2. Fire them all simultaneously and wait for the entire batch to finish
     await Promise.all(tasks);
-    
-    console.log(`--- Cycle Finished ---`);
 }
 
+// Run the checks every 10 seconds
 setInterval(checkAllWebsitesConcurrent, 10000);
 checkAllWebsitesConcurrent();
